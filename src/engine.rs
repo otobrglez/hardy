@@ -1,4 +1,4 @@
-use crate::board::{Board, Move, Position};
+use crate::board::{Board, Move};
 use crate::engine::GameEngineError::NoMove;
 use crate::player::Player;
 use rand::seq::SliceRandom;
@@ -27,23 +27,35 @@ pub trait GameEngine {
     fn next_move(&mut self, playing: Player) -> Result<Move, GameEngineError>;
 }
 
-pub struct RandomEngine {
+pub struct AlmostRandomEngine {
     board: Board,
 }
 
-impl GameEngine for RandomEngine {
+impl GameEngine for AlmostRandomEngine {
     fn load_board(board: Board) -> Result<Self, GameEngineError> {
-        Ok(RandomEngine { board })
+        Ok(AlmostRandomEngine { board })
     }
 
     fn next_move(&mut self, playing: Player) -> Result<Move, GameEngineError> {
         let empty_positions = self.board.empty_positions();
-        let random_position = empty_positions.choose(&mut rand::thread_rng());
 
-        if let Some(position) = random_position {
+        let maybe_move = if self.board.number_of_moves() == 0 {
+            let center_position = match self.board.size {
+                3 => (1, 1),
+                5 => (3, 3),
+                7 => (4, 4),
+                _ => panic!("Impossible.")
+            };
+
+            Some(Move { player: playing, position: center_position })
+        } else {
+            empty_positions.choose(&mut rand::thread_rng()).map(|&position| Move { player: playing, position })
+        };
+
+        if let Some(new_move) = maybe_move {
             Ok(Move {
-                player: playing,
-                position: position.clone(),
+                player: new_move.player,
+                position: new_move.position,
             })
         } else {
             Err(NoMove {
@@ -60,15 +72,14 @@ mod tests {
     use crate::size::Size;
 
     #[test]
-    fn test_load_board() -> Result<(), Box<dyn Error>> {
+    fn test_load_board() {
         let mut board = Board::new(Size::from_usize(3));
-        board.add_move(X, (0, 0))?;
-        board.add_move(O, (1, 1))?;
+        board.add_move(X, (0, 0)).expect("Failed to add move");
+        board.add_move(O, (1, 1)).expect("Failed to add move");
 
-        let mut engine = RandomEngine::load_board(board)?;
-        let next_move = engine.next_move(X)?;
+        let mut engine = AlmostRandomEngine::load_board(board).expect("Failed to load board");
+        let next_move = engine.next_move(X);
 
-        println!("{:?}", next_move);
-        Ok(())
+        assert_eq!(next_move.unwrap().player, X)
     }
 }

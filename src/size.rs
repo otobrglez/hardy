@@ -11,28 +11,30 @@ pub enum Size {
     Size7,
 }
 
+use Size::*;
+
 impl Size {
     fn as_str(&self) -> &str {
         match self {
-            Size::Size3 => "3x3",
-            Size::Size5 => "5x5",
-            Size::Size7 => "7x7",
+            Size3 => "3x3",
+            Size5 => "5x5",
+            Size7 => "7x7",
         }
     }
 
-    pub(crate) fn as_usize(&self) -> usize {
+    pub fn as_usize(&self) -> usize {
         match self {
-            Size::Size3 => 3,
-            Size::Size5 => 5,
-            Size::Size7 => 7,
+            Size3 => 3,
+            Size5 => 5,
+            Size7 => 7,
         }
     }
 
-    pub(crate) fn from_usize(raw: i32) -> Size {
+    pub fn from_usize(raw: i32) -> Size {
         match raw {
-            3 => Size::Size3,
-            5 => Size::Size5,
-            7 => Size::Size7,
+            3 => Size3,
+            5 => Size5,
+            7 => Size7,
             _ => panic!("Invalid size value"),
         }
     }

@@ -6,7 +6,7 @@ extern crate pretty_env_logger;
 use clap::Parser;
 use hardy::board::{Board, Move};
 use hardy::engine::GameEngine;
-use hardy::engine::{GameEngineError, RandomEngine};
+use hardy::engine::{GameEngineError, AlmostRandomEngine};
 use hardy::server::game_query::GameQuery;
 use std::convert::Infallible;
 use warp::{http::StatusCode, *};
@@ -22,7 +22,7 @@ struct ServerArgs {
 struct InvalidParameter;
 
 async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
-    let code;
+    let code: StatusCode;
     let message: String;
 
     if err.is_not_found() {
@@ -45,12 +45,25 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
 
 fn next_move(game_query: &GameQuery) -> Result<Move, GameEngineError> {
     let game_query_r = game_query.clone();
-    let board = Board::try_from(game_query_r).map_err(|e| GameEngineError::LoadingError {
+    let board = Board::try_from(game_query_r).map_err(|_| GameEngineError::LoadingError {
         message: "Problem with board loading.".to_string(),
     })?;
-    let mut engine = RandomEngine::load_board(board)?;
+    let mut engine = AlmostRandomEngine::load_board(board)?;
     let next_move = engine.next_move(game_query.playing);
     next_move
+}
+
+fn create_response(result: Result<Move, GameEngineError>) -> impl Reply {
+    match result {
+        Ok(Move { player, position }) => reply::with_status(
+            format!("Move:{}-{}-{}", player, position.0, position.1),
+            StatusCode::OK,
+        ),
+        Err(err) => reply::with_status(
+            format!("Error:{}", err),
+            StatusCode::BAD_REQUEST,
+        ),
+    }
 }
 
 #[tokio::main]
@@ -61,12 +74,7 @@ async fn main() {
     let get_move = path!("move")
         .and(warp::query::<GameQuery>())
         .map(|query: GameQuery| next_move(&query))
-        .map(|maybe_move| {
-            match maybe_move {
-                Ok(Move { player, position }) => reply::with_status(format!("Move:{}-{}-{}", player, position.0, position.1).to_string(), StatusCode::BAD_REQUEST),
-                Err(err) => reply::with_status(format!("Error:{}", err).to_string(), StatusCode::BAD_REQUEST),
-            }
-        });
+        .map(create_response);
 
     serve(get_move.recover(handle_rejection))
         .run(([0, 0, 0, 0], args.port))

@@ -7,7 +7,7 @@ use serde_derive::{Deserialize, Serialize};
 #[derive(PartialEq, Clone, Debug)]
 pub struct Board {
     cells: Vec<Option<Player>>,
-    size: usize,
+    pub size: usize,
 }
 
 pub type Position = (usize, usize);
@@ -17,6 +17,14 @@ pub struct Move {
     pub player: Player,
     pub position: Position,
 }
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Copy)]
+pub enum GameResult {
+    Won(Player),
+    Tie,
+    Pending,
+}
+use GameResult::*;
 
 impl Board {
     pub(crate) fn new(size: Size) -> Board {
@@ -28,6 +36,10 @@ impl Board {
 
     fn is_empty(&self) -> bool {
         self.cells.iter().all(|&cell| cell.is_none())
+    }
+
+    pub fn number_of_moves(&self) -> usize {
+        self.cells.iter().filter(|&cell| cell.is_some()).count()
     }
 
     pub fn empty_positions(&self) -> Vec<Position> {
@@ -60,14 +72,67 @@ impl Board {
         self.add_move(a_move.player, a_move.position)
     }
 
-    const EMPTY_SYMBOL: &'static str = ".";
+    fn result(&self) -> GameResult {
+        let win_condition = if self.size == 3 { 3 } else { 4 };
+
+        // Check rows
+        for row in 0..self.size {
+            for col in 0..=(self.size - win_condition) {
+                if let Some(player) = self.cells[row * self.size + col] {
+                    if (1..win_condition).all(|i| self.cells[row * self.size + (col + i)] == Some(player)) {
+                        return Won(player);
+                    }
+                }
+            }
+        }
+
+        // Check columns
+        for col in 0..self.size {
+            for row in 0..=(self.size - win_condition) {
+                if let Some(player) = self.cells[row * self.size + col] {
+                    if (1..win_condition).all(|i| self.cells[(row + i) * self.size + col] == Some(player)) {
+                        return Won(player);
+                    }
+                }
+            }
+        }
+
+        // Check diagonals (top-left to bottom-right)
+        for row in 0..=(self.size - win_condition) {
+            for col in 0..=(self.size - win_condition) {
+                if let Some(player) = self.cells[row * self.size + col] {
+                    if (1..win_condition).all(|i| self.cells[(row + i) * self.size + (col + i)] == Some(player)) {
+                        return Won(player);
+                    }
+                }
+            }
+        }
+
+        // Check diagonals (top-right to bottom-left)
+        for row in 0..=(self.size - win_condition) {
+            for col in (win_condition - 1)..self.size {
+                if let Some(player) = self.cells[row * self.size + col] {
+                    if (1..win_condition).all(|i| self.cells[(row + i) * self.size + (col - i)] == Some(player)) {
+                        return Won(player);
+                    }
+                }
+            }
+        }
+
+        // Check for tie or pending game
+        if self.cells.iter().all(|&cell| cell.is_some()) {
+            Tie
+        } else {
+            Pending
+        }
+    }
 
     fn display(&self) -> () {
         for row in 0..self.size {
             for col in 0..self.size {
                 let symbol = match self.cells[row * self.size + col] {
                     Some(x) => x.to_string(),
-                    None => Self::EMPTY_SYMBOL.to_string(),
+                    None => ".".to_string(),
                 };
                 print!("{}", symbol);
             }
@@ -82,10 +147,10 @@ impl TryFrom<GameQuery> for Board {
 
     fn try_from(game_query: GameQuery) -> Result<Self, Self::Error> {
         let mut board: Board = Board::new(Size::from_usize(3));
-        game_query.moves.iter().for_each(|&m| {
-            board.add_a_move(m).expect("Failed adding a move.");
-        });
-
+        game_query
+            .moves
+            .iter()
+            .for_each(|&m| board.add_a_move(m).expect("Failed adding a move."));
         Ok(board)
     }
 }
@@ -125,13 +190,12 @@ mod tests {
         board1.add_move(O, (1, 1)).unwrap();
         board1.add_move(X, (0, 1)).unwrap();
         board1.add_move(O, (0, 2)).unwrap();
-        board1
-            .add_a_move(Move {
-                player: X,
-                position: (2, 0),
-            })
+        board1.add_a_move(Move {
+            player: X,
+            position: (2, 0),
+        })
             .unwrap();
-        board1.display();
+        // board1.display();
     }
 
     #[test]
@@ -149,10 +213,52 @@ mod tests {
                     player: O,
                     position: (0, 1),
                 },
+                Move {
+                    player: X,
+                    position: (2, 1),
+                }
             ],
         };
 
         let board = Board::try_from(query_1).unwrap();
-        board.display();
+        assert_eq!(board.result(), Pending)
+    }
+
+    #[test]
+    fn test_game_result_pending() {
+        let mut board1 = Board::new(Size::from_usize(3));
+        board1.add_move(X, (0, 0)).unwrap();
+        board1.add_move(O, (1, 1)).unwrap();
+        board1.add_move(X, (0, 1)).unwrap();
+        board1.add_move(O, (0, 2)).unwrap();
+        board1.add_move(X, (2, 2)).unwrap();
+        assert_eq!(board1.result(), Pending);
+    }
+
+    #[test]
+    fn test_game_result_winner() {
+        let mut board1 = Board::new(Size::from_usize(3));
+        board1.add_move(X, (0, 0)).unwrap();
+        board1.add_move(O, (1, 1)).unwrap();
+        board1.add_move(X, (0, 1)).unwrap();
+        board1.add_move(O, (0, 2)).unwrap();
+        board1.add_move(X, (2, 2)).unwrap();
+        board1.add_move(O, (2, 0)).unwrap();
+        assert_eq!(board1.result(), Won(O));
+    }
+
+    #[test]
+    fn test_game_result_tie() {
+        let mut board1 = Board::new(Size::from_usize(3));
+        board1.add_move(X, (0, 0)).unwrap();
+        board1.add_move(O, (0, 1)).unwrap();
+        board1.add_move(X, (0, 2)).unwrap();
+        board1.add_move(O, (1, 0)).unwrap();
+        board1.add_move(X, (1, 2)).unwrap();
+        board1.add_move(O, (1, 1)).unwrap();
+        board1.add_move(X, (2, 0)).unwrap();
+        board1.add_move(O, (2, 2)).unwrap();
+        board1.add_move(X, (2, 1)).unwrap();
+        assert_eq!(board1.result(), Tie);
     }
 }

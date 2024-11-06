@@ -14,13 +14,7 @@ async fn arguments() -> Result<CliArguments, Error> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let arguments = arguments().await;
-    if arguments.is_err() {
-        eprintln!("Error parsing arguments: {}", arguments.unwrap_err());
-        std::process::exit(1);
-    }
-
-    let arguments = arguments.unwrap();
+    let arguments = arguments().await?;
     println!("Generating w/ size {}", arguments.size);
     Ok(())
 }

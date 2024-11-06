@@ -4,6 +4,10 @@ version = "0.0.1"
 edition = "2021"
 publish = false
 
+#[profile.release]
+# or "z"
+#opt-level = "s"
+
 [lib]
 doctest = false
 
