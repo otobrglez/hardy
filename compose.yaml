@@ -1,0 +1,9 @@
+services:
+  hardy:
+    image: otobrglez/hardy
+    build:
+      context: .
+      target: final
+    ports:
+      - "8884:8884"
+
